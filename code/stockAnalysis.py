@@ -5,6 +5,18 @@ import shutil
 import re
 
 
+def test2(f, name,dirpath,dirname,destpath):
+    # this test2 is used to make shorter version of the input file used in the analysis 
+    # easier for testing things
+    # take raw input and give out a concatenated version of the file
+    # put into preprocess folder
+    
+    return
+
+    
+    
+    
+
 
 def test(f,name):
     mycursor = mydb.cursor()
@@ -38,39 +50,39 @@ def test(f,name):
     mydb.commit()
     print("continue")
 
-##    for x in f:
-##        print(x)
-##        
-##        
-##        # read a line from file
-##        a = f.readline()
-##        print(a)
-##        # split the line into tokens
-##        token = re.split(r'\t+',a)
-##        print(token)
-
+    ##    for x in f:
+    ##        print(x)
+    ##        
+    ##        
+    ##        # read a line from file
+    ##        a = f.readline()
+    ##        print(a)
+    ##        # split the line into tokens
+    ##        token = re.split(r'\t+',a)
+    ##        print(token)
     
-            
-
-##
-##    sql = "INSERT INTO customers (name, address) VALUES (%s, %s)"
-##    val = ("John", "Highway 21")
-##
-##    sql = "Show Tabels"
-##    mycursor.execute(sql)
-##
-##
-##    #mydb.commit()
-##
-##    #print(mycursor.rowcount, "record inserted.")
-##    #print("1 record inserted, ID:", mycursor.lastrowid)
-##
-##    #mycursor.execute("SELECT * FROM customers")
-##
-##    #myresult = mycursor.fetchall()
-##
-##    for x in mycursor:
-##      print(x)
+        
+                
+    
+    ##
+    ##    sql = "INSERT INTO customers (name, address) VALUES (%s, %s)"
+    ##    val = ("John", "Highway 21")
+    ##
+    ##    sql = "Show Tabels"
+    ##    mycursor.execute(sql)
+    ##
+    ##
+    ##    #mydb.commit()
+    ##
+    ##    #print(mycursor.rowcount, "record inserted.")
+    ##    #print("1 record inserted, ID:", mycursor.lastrowid)
+    ##
+    ##    #mycursor.execute("SELECT * FROM customers")
+    ##
+    ##    #myresult = mycursor.fetchall()
+    ##
+    ##    for x in mycursor:
+    ##      print(x)
 
 
 
@@ -126,6 +138,7 @@ def construct_insert_statement(table,token):
 
 def import_to_db():
     
+    
     flag = 0
 
     # prereq need to have data file in the 'raw' directory
@@ -153,14 +166,42 @@ def import_to_db():
 
     
 
+
 def preprocessing():
 
     raw_path = "./raw"
     prepro_path = "./prepro"
-
         
     # takes files in the raw folder and unzip into preprocessed folder
     print("assume the files are extracted into txt format")
+    
+    
+    
+    # delete items in the destination path
+    folder = prepro_path
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))    
+    
+    
+    # Walking a directory tree and printing the names of the directories and files
+    for dirpath, dirnames, files in os.walk(raw_path):
+        print(f'Found directory: {dirpath}')
+        for file_name in files:
+            print(file_name)
+            f = open(dirpath+"/"+file_name,"r")
+            
+            test2(f,file_name,dirpath,dirnames,prepro_path)
+                
+            f.close()
+
+    
 
 def resetDB():
     try:
