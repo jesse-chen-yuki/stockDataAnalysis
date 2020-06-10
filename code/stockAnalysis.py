@@ -1,32 +1,174 @@
 import mysql.connector
 from zipfile import ZipFile
+from datetime import datetime
+from datetime import timedelta  
+from dateutil.relativedelta import relativedelta
 import os
 import shutil
 import re
 
 
-def test2(f, name,dirpath,dirname,destpath):
-    # this test2 is used to make shorter version of the input file used in the analysis 
-    # easier for testing things
-    # take raw input and give out a concatenated version of the file
-    # put into preprocess folder
+def kbar_open(stock, start):
+    global mydb
+    mycursor = mydb.cursor()
     
-    return
+    time_str = start.strftime('%Y%m%d%H%M%S%f')
+    time_str = time_str[:-3]
+    
+    #print(time_str)
+    sql = '''
+        SELECT price FROM shenzhendata.hq_trade_spot 
+     where SecurityID = ''' + stock +  '''
+     and origtime>= '''+time_str+'''
+     order by applseqnum
+     limit 1'''
+    #print(sql)
+    
+    mycursor.execute(sql)
+    
+    try:
+        result = mycursor.fetchone()[0]
+    except:
+        return None
+    return result
+    
+    
+    
+def kbar_high(stock, start,end):
+    global mydb
+    mycursor = mydb.cursor()
+    
+    start_str = start.strftime('%Y%m%d%H%M%S%f')[:-3]
+    end_str = end.strftime('%Y%m%d%H%M%S%f')[:-3]
+    
+    sql = '''
+        SELECT max(price) FROM shenzhendata.hq_trade_spot 
+     where SecurityID = ''' + stock +  '''
+     and origtime >= '''+start_str+'''
+     and origtime <= ''' + end_str+'''
+     order by applseqnum'''
+    #print(sql)    
+    
+    mycursor.execute(sql)
+    return mycursor.fetchone()[0]
+        
+ 
+ 
+def kbar_seg(stock,start,end):
+    
+    open = kbar_open(stock, start)
+    print('open is ')
+    print(open)
+    high = kbar_high(stock, start,end)
+    print(high)
+    
+    
+    # analyze the specified stock in the specified time period
+    # returns following
+    # start time, stock, open, high, low, close, volumn, cmount, num_trades, vwap
+    
+    return open
+    
+    
+def test(start,end,stock_list,period):
+    
+    starttime = datetime.fromisoformat(start)
+    endtime = datetime.fromisoformat(end)
+    #print(starttime)
+    #print(endtime)    
+    
+    result = []
+    
+    if period == 's':
+        time_increment = timedelta(seconds=1) 
+    elif period == 'm':
+        time_increment = timedelta(minutes=1) 
+    elif period == 'h':
+        time_increment = timedelta(hours=1)     
+    elif period == 'd':
+        time_increment = timedelta(days=1)     
+    elif period == 'w':
+        time_increment = timedelta(weeks=1)     
+    elif period == 'M':
+        time_increment = relativedelta(months=1)     
+    
+    
+        
+    for stock in stock_list:
+        # find out how many queries need to be sent based on start, end, period
+        print(stock)
+        
+        q_start = starttime
+        q_end = starttime+time_increment
+        
+        while q_start <= endtime:
+            # call query function
+            result.append(kbar_seg(stock, q_start, q_end))
+            
+            q_start += time_increment
+            q_end += time_increment
+        
+        
+    return result
+        
+    
+def get_dataset(start, end, stock, column):
+    # input
+    # start: start time format yyyymmddhhmmssxxx
+    # end: start time format yyyymmddhhmmssxxx
+    # stock: stock list with id format ssssss
+    # column: appoint what column to get
+    
+    # query the db regarding specific stuff
+    # return_value = database.get_dataset(start_time, end_time, stock_list, fields = ["price", "volume"]), 
+    #return a dataset contains time, stock code, price, volume
+    
+    global mydb
+    mycursor = mydb.cursor()
+    
+    #print('under test')
+    #print(start, end, stock)
+    
+    sql = 'SELECT origtime, securityID '
+    for a in column:
+        if a == '1':
+            sql = sql + ', price '
+        elif a == '2':
+            sql = sql + ', tradeqty '
+    
+    sql = sql +  'FROM shenzhendata.hq_trade_spot \n'
+    sql = sql+ ' where origtime >=  \''+start + '\'\n'
+    sql = sql+ ' and origtime <=  \''+end + '\'\n'
+    sql = sql+ ' and ( \n securityID =  \''+stock.pop(0) + '\'\n'
+    
+    for a in stock:
+        sql = sql + ' or securityID =  \''+a + '\'\n'
+    sql = sql+')'
+    
+    print(sql)
+    mycursor.execute(sql)
+            
+    result = []
+    for x in mycursor:
+        result.append(x)
+    
+    
+    #print(result)
+    mycursor.close()
+    return result
 
-    
-    
-    
 
-
-def test(f,name):
+def import_line(f,name):
     mycursor = mydb.cursor()
     table = name.replace('.txt','').replace('am_','').replace('pm_','')
-    
+    read_count_max = 10
     
     #print(sql)
 
+    i = 0
     for a in f:
-
+        
+        
         # read a line from file
         a = f.readline()
         #print(a)
@@ -46,8 +188,16 @@ def test(f,name):
         print(sql)
         mycursor.execute(sql)
         
+        
+        
+        
+        if i==read_count_max:
+            mydb.commit()
+            break
+        else:
+            i += 1
+        
     
-    mydb.commit()
     print("continue")
 
     ##    for x in f:
@@ -158,7 +308,7 @@ def import_to_db():
                 for x in f:
                     print(x)
             else:
-                test(f,file_name)
+                import_line(f,file_name)
                 print()
                 
             
@@ -167,15 +317,7 @@ def import_to_db():
     
 
 
-def preprocessing():
-
-    raw_path = "./raw"
-    prepro_path = "./prepro"
-        
-    # takes files in the raw folder and unzip into preprocessed folder
-    print("assume the files are extracted into txt format")
-    
-    
+def prepro_init(raw_path,prepro_path):
     
     # delete items in the destination path
     folder = prepro_path
@@ -188,10 +330,28 @@ def preprocessing():
                 shutil.rmtree(file_path)
         except Exception as e:
             print('Failed to delete %s. Reason: %s' % (file_path, e))    
+
+def prepro_copy(raw_path,prepro_path):
     
+    # copy the content from raw to preprocess folder
+    src = raw_path
+    dst = prepro_path
+    symlinks=False
+    ignore=None
+    
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, symlinks, ignore)
+        else:
+            shutil.copy2(s, d)       
+
+def prepro_concat(prepro_path):
+    # make file shorter for the purpose of testing
     
     # Walking a directory tree and printing the names of the directories and files
-    for dirpath, dirnames, files in os.walk(raw_path):
+    for dirpath, dirnames, files in os.walk(prepro_path):
         print(f'Found directory: {dirpath}')
         for file_name in files:
             print(file_name)
@@ -200,39 +360,53 @@ def preprocessing():
             test2(f,file_name,dirpath,dirnames,prepro_path)
                 
             f.close()
-
     
+    return
 
-def resetDB():
-    try:
-        print("reset DB")
-        mydb = mysql.connector.connect(
-            #connect to db
-          host="127.0.0.1",
-          user="root",
-          passwd="pwpw",
-          database="shenzhendata"
-        )
-        print(mydb)
-        mycursor = mydb.cursor()
+def preprocessing():
+
+    # takes files in the raw folder and unzip into preprocessed folder
+    print("assume the files are extracted into txt format")
     
+    raw_path = "./raw"
+    prepro_path = "./prepro"
         
-    except:
-        print("no need for reset")
+    prepro_init(raw_path,prepro_path)
+    prepro_copy(raw_path,prepro_path)
+    prepro_concat(prepro_path)
+    
+def resetDB():
+    global mydb
+    
+    mycursor = mydb.cursor()
+    
+    # drop database
+    mycursor.execute("DROP DATABASE shenzhendata")
 
-    ##check with user if want full initialization
-    reset = input('Reset Database (y/n)')
-    if reset == "y":
-        mycursor.execute("DROP DATABASE shenzhendata")
-        mydb.close()
+    # init database
+    mycursor.execute("CREATE DATABASE shenzhendata")
+
+    mydb = mysql.connector.connect(
+        #connect to db
+      host="127.0.0.1",
+      user="root",
+      passwd="pwpw",
+      database="shenzhendata"
+    )
+    
+    mycursor = mydb.cursor()
+    
+    # init table
+    init_table(mydb) 
 
 
 def dbconnect():
-    # connect to database
     global mydb
-    resetDB()
+    # connect to database
+    
+    #resetDB()
     try:
-        print("regular dbconnect")
+        # try connect with shenzhendata table
         mydb = mysql.connector.connect(
             #connect to db
           host="127.0.0.1",
@@ -240,26 +414,26 @@ def dbconnect():
           passwd="pwpw",
           database="shenzhendata"
         )
-        print(mydb)
+        #print(mydb)
         mycursor = mydb.cursor()
         mycursor.execute("SHOW TABLES")
+        print('show all tables')
         for x in mycursor:
             print(x)
         
     except:
-        # mydatabase not setup, need full init
-        print("dbconnect except")
+        # shenzhentable not setup, create shenzhen table
+        
         mydb = mysql.connector.connect(
             #connect to db
           host="127.0.0.1",
           user="root",
           passwd="pwpw"
         )
-        print(mydb)
         mycursor = mydb.cursor()
         
             
-        # init database
+        # init table
         mycursor.execute("CREATE DATABASE shenzhendata")
 
         mydb = mysql.connector.connect(
@@ -269,15 +443,14 @@ def dbconnect():
           passwd="pwpw",
           database="shenzhendata"
         )
-        print(mydb)
+        
         mycursor = mydb.cursor()
         
         # init table
-        init_table(mycursor)
+        init_table(mydb)        
         
-    print("end dbconnect")
 
-def init_table(mycursor):
+def init_table(mydb):
     mycursor = mydb.cursor()
     print(mycursor)
     
@@ -1047,16 +1220,88 @@ def init_table(mycursor):
     mycursor.execute(sql)
 
 def main():
-    print("the main")
+    global mydb
     dbconnect()
-    preprocessing()
-    import_to_db()
+    
+    # wether to create new file to prepare
+    # other way is to limit the read lines into the db
+    # preprocessing()
+    # currently only take 10 lines into the db for easy testing
+    
+    while True:
+        option = input('what do you want to do? 1 import, 2 reset, 3 query, 4 kbar analysis,  5 exit\t')
+        if option == '1':
+            import_to_db()
+        elif option == '2':
+            resetDB()
+        elif option == '3':
+            
+            # query the trade spot database
+            
+            # get parameter
+            start = input('enter start time\t')
+            end = input('enter end time\t')
+            stock = input('enter stock list\t')
+            column = input('column interested: 1 price, 2, volumn ')
+            
+            # dummy variable for test
+            start= '20190102091500010'
+            end= '20190102140000000'
+            stock = ['002899' ,'300548','000000']   
+            column = '12'
+            
+            result = get_dataset(start, end, stock, column)
+            for a in result:
+                print(a)
+        elif option == '4':
+            ' do the kbar analysis'
+            # get parameter
+            start = input('enter start time\t')
+            end = input('enter end time\t')
+            stock = input('enter stock list\t')
+            period = input('time period (s,m,h,d,w,M) ')
+            
+            # dummy variable for test
+            start= '2019-01-02 09:30:00'
+            end= '2019-01-02 13:35:00'
+            stock = ['002899' ,'300548']   
+            period = 'h'
+            test(start,end,stock,period)
+            
+        else:
+            return
     
     
 main()
 
 
+# TODO:
+
+# issue 2 implement kbar analyzing stuff
+# issue 3 talib 
+# write test class and self check
+
+
+# MAJOR ISSUES
+
+
 # update history
+
+# 2020-06-10
+# Issue 1 complete, may need more testing or automated testing
+# issue 1 achieve single stock function, add functionality for stock list
+# issue 1 add functionality to select multiple data column currently price and volumn
+
+
+
+# 2020-06-05
+# create while loop for option selection
+# refreacor initialization part
+# change to read 10 line of each imported file
+# change table column to fit the actural import file
+# hq_snap_pledge: table definition and data column does not match
+# hq_snap_spot: table definition and data column does not match
+
 
 # 2020-02-12 1630-1830
 # adjust INT(64) into BIGINT during table setup ** for Mysql only\
@@ -1069,22 +1314,6 @@ main()
 #   -hq_snap_pledge
 #   -hq_snap_spot
 # Temp Solution: exclude hq_snap_pledge hq_snap_spot data file during import
-
-# TODO:
-# continue prepare insert statement for entire file
-# make insert and select test
-# create user interface to import and specify range of select
-# create function to handel zip file in preprocessing
-
-# MAJOR ISSUES
-# hq_snap_pledge: table definition and data column does not match
-#   definition: 10 columns after TradingPhaseCode
-#   data: 13 columns after TradingPhaseCode
-# hq_snap_spot: table definition and data column does not match
-#   definition: 10 columns after TradingPhaseCode
-#   data: 13 columns after TradingPhaseCode
-
-
 
 
 # Archive:
@@ -1105,7 +1334,3 @@ main()
 # read file from directory
 # parse file from directory
 # create database, create table, test insert and select
-
-
-
-
