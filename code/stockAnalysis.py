@@ -7,7 +7,67 @@ import os
 import shutil
 import re
 
-
+def kbar_num(stock, start, end):
+    global mydb
+    mycursor = mydb.cursor()
+    
+    start_str = start.strftime('%Y%m%d%H%M%S%f')[:-3]
+    end_str = end.strftime('%Y%m%d%H%M%S%f')[:-3]
+    
+    sql = '''
+        SELECT count(*) FROM shenzhendata.hq_trade_spot 
+     where SecurityID = ''' + stock +  '''
+     and origtime >= '''+start_str+'''
+     and origtime <= ''' + end_str+'''
+     order by applseqnum'''
+    #print(sql)    
+    
+    mycursor.execute(sql)
+    try:
+        return mycursor.fetchone()[0]
+    except:
+        return None    
+def kbar_amount(stock, start, end):
+    global mydb
+    mycursor = mydb.cursor()
+    
+    start_str = start.strftime('%Y%m%d%H%M%S%f')[:-3]
+    end_str = end.strftime('%Y%m%d%H%M%S%f')[:-3]
+    
+    sql = '''
+        SELECT sum(TradeQty*price) FROM shenzhendata.hq_trade_spot 
+     where SecurityID = ''' + stock +  '''
+     and origtime >= '''+start_str+'''
+     and origtime <= ''' + end_str+'''
+     order by applseqnum'''
+    #print(sql)    
+    
+    mycursor.execute(sql)
+    try:
+        return mycursor.fetchone()[0]
+    except:
+        return None      
+def kbar_volumn(stock, start, end):
+    global mydb
+    mycursor = mydb.cursor()
+    
+    start_str = start.strftime('%Y%m%d%H%M%S%f')[:-3]
+    end_str = end.strftime('%Y%m%d%H%M%S%f')[:-3]
+    
+    sql = '''
+        SELECT sum(TradeQty) FROM shenzhendata.hq_trade_spot 
+     where SecurityID = ''' + stock +  '''
+     and origtime >= '''+start_str+'''
+     and origtime <= ''' + end_str+'''
+     order by applseqnum'''
+    #print(sql)    
+    
+    mycursor.execute(sql)
+    try:
+        return mycursor.fetchone()[0]
+    except:
+        return None      
+    
 def kbar_open(stock, start):
     global mydb
     mycursor = mydb.cursor()
@@ -27,11 +87,32 @@ def kbar_open(stock, start):
     mycursor.execute(sql)
     
     try:
-        result = mycursor.fetchone()[0]
+        return mycursor.fetchone()[0]
     except:
         return None
-    return result
     
+def kbar_close(stock, end):
+    global mydb
+    mycursor = mydb.cursor()
+    
+    time_str = end.strftime('%Y%m%d%H%M%S%f')
+    time_str = time_str[:-3]
+    
+    #print(time_str)
+    sql = '''
+        SELECT price FROM shenzhendata.hq_trade_spot 
+     where SecurityID = ''' + stock +  '''
+     and origtime<= '''+time_str+'''
+     order by applseqnum desc
+     limit 1'''
+    #print(sql)
+    
+    mycursor.execute(sql)
+    
+    try:
+        return mycursor.fetchone()[0]
+    except:
+        return None
     
     
 def kbar_high(stock, start,end):
@@ -50,24 +131,52 @@ def kbar_high(stock, start,end):
     #print(sql)    
     
     mycursor.execute(sql)
-    return mycursor.fetchone()[0]
-        
+    try:
+        return mycursor.fetchone()[0]
+    except:
+        return None  
  
- 
+def kbar_low(stock, start,end):
+    global mydb
+    mycursor = mydb.cursor()
+    
+    start_str = start.strftime('%Y%m%d%H%M%S%f')[:-3]
+    end_str = end.strftime('%Y%m%d%H%M%S%f')[:-3]
+    
+    sql = '''
+        SELECT min(price) FROM shenzhendata.hq_trade_spot 
+     where SecurityID = ''' + stock +  '''
+     and origtime >= '''+start_str+'''
+     and origtime <= ''' + end_str+'''
+     order by applseqnum'''
+    #print(sql)    
+    
+    mycursor.execute(sql)
+    try:
+        return mycursor.fetchone()[0]
+    except:
+        return None  
+
 def kbar_seg(stock,start,end):
-    
-    open = kbar_open(stock, start)
-    print('open is ')
-    print(open)
-    high = kbar_high(stock, start,end)
-    print(high)
-    
-    
     # analyze the specified stock in the specified time period
     # returns following
-    # start time, stock, open, high, low, close, volumn, cmount, num_trades, vwap
+    # start time, stock, open, high, low, close, volumn, amount, num_trades, vwap
     
-    return open
+    start_str = start.strftime('%Y%m%d%H%M%S%f')[:-3]
+    
+    open_amt = kbar_open(stock, start)
+    high = kbar_high(stock, start,end)
+    low = kbar_low(stock, start,end)
+    close = kbar_close(stock, end)
+    volumn = kbar_volumn(stock, start, end)
+    amount = kbar_amount(stock, start, end)
+    num_trade = kbar_num(stock, start, end)
+    try:
+        vwap = amount/volumn
+    except:
+        vwap = 0
+    
+    return [start_str, stock, open_amt, high,low,close,volumn,amount,num_trade,vwap]
     
     
 def test(start,end,stock_list,period):
@@ -91,23 +200,23 @@ def test(start,end,stock_list,period):
         time_increment = timedelta(weeks=1)     
     elif period == 'M':
         time_increment = relativedelta(months=1)     
-    
-    
         
     for stock in stock_list:
         # find out how many queries need to be sent based on start, end, period
-        print(stock)
+        print('stock ' + str(stock))
         
         q_start = starttime
         q_end = starttime+time_increment
         
         while q_start <= endtime:
             # call query function
+            #result.append(q_start)
             result.append(kbar_seg(stock, q_start, q_end))
             
             q_start += time_increment
             q_end += time_increment
         
+        print('next set \n')
         
     return result
         
@@ -1266,8 +1375,8 @@ def main():
             end= '2019-01-02 13:35:00'
             stock = ['002899' ,'300548']   
             period = 'h'
-            test(start,end,stock,period)
-            
+            result = test(start,end,stock,period)
+            print(result)
         else:
             return
     
@@ -1291,7 +1400,7 @@ main()
 # Issue 1 complete, may need more testing or automated testing
 # issue 1 achieve single stock function, add functionality for stock list
 # issue 1 add functionality to select multiple data column currently price and volumn
-
+# issue 2 kbar open, high, low
 
 
 # 2020-06-05
