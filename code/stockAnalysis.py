@@ -7,6 +7,7 @@ import os
 import shutil
 import re
 
+
 def kbar_num(stock, start, end):
     global mydb
     mycursor = mydb.cursor()
@@ -176,10 +177,10 @@ def kbar_seg(stock,start,end):
     except:
         vwap = 0
     
-    return [start_str, stock, open_amt, high,low,close,volumn,amount,num_trade,vwap]
+    return [stock, start_str, open_amt, high,low,close,volumn,amount,num_trade,vwap]
     
     
-def test(start,end,stock_list,period):
+def kbar(start,end,stock_list,period):
     
     starttime = datetime.fromisoformat(start)
     endtime = datetime.fromisoformat(end)
@@ -1375,8 +1376,11 @@ def main():
             end= '2019-01-02 13:35:00'
             stock = ['002899' ,'300548']   
             period = 'h'
-            result = test(start,end,stock,period)
-            print(result)
+            result = kbar(start,end,stock,period)
+            for i in result:
+                print(i)
+            
+            
         else:
             return
     
@@ -1386,7 +1390,7 @@ main()
 
 # TODO:
 
-# issue 2 implement kbar analyzing stuff
+# issue 2 testing
 # issue 3 talib 
 # write test class and self check
 
@@ -1400,7 +1404,7 @@ main()
 # Issue 1 complete, may need more testing or automated testing
 # issue 1 achieve single stock function, add functionality for stock list
 # issue 1 add functionality to select multiple data column currently price and volumn
-# issue 2 kbar open, high, low
+# issue 2 kbar all measures
 
 
 # 2020-06-05
