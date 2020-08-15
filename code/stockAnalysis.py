@@ -3,9 +3,14 @@ from zipfile import ZipFile
 from datetime import datetime
 from datetime import timedelta  
 from dateutil.relativedelta import relativedelta
+from clickhouse_driver import Client
 import os
 import shutil
 import re
+import math
+import sys
+import logging
+from csv import DictReader
 
 
 def kbar_num(stock, start, end):
@@ -21,7 +26,7 @@ def kbar_num(stock, start, end):
      and origtime >= '''+start_str+'''
      and origtime <= ''' + end_str+'''
      order by applseqnum'''
-    #print(sql)    
+    logging.debug(sql)
     
     mycursor.execute(sql)
     try:
@@ -41,7 +46,7 @@ def kbar_amount(stock, start, end):
      and origtime >= '''+start_str+'''
      and origtime <= ''' + end_str+'''
      order by applseqnum'''
-    #print(sql)    
+    logging.debug(sql)
     
     mycursor.execute(sql)
     try:
@@ -61,7 +66,7 @@ def kbar_volumn(stock, start, end):
      and origtime >= '''+start_str+'''
      and origtime <= ''' + end_str+'''
      order by applseqnum'''
-    #print(sql)    
+    #logging.debug(sql)
     
     mycursor.execute(sql)
     try:
@@ -76,14 +81,14 @@ def kbar_open(stock, start):
     time_str = start.strftime('%Y%m%d%H%M%S%f')
     time_str = time_str[:-3]
     
-    #print(time_str)
+    #logging.debug(time_str)
     sql = '''
         SELECT price FROM shenzhendata.hq_trade_spot 
      where SecurityID = ''' + stock +  '''
      and origtime>= '''+time_str+'''
      order by applseqnum
      limit 1'''
-    #print(sql)
+    #logging.debug(sql)
     
     mycursor.execute(sql)
     
@@ -99,14 +104,14 @@ def kbar_close(stock, end):
     time_str = end.strftime('%Y%m%d%H%M%S%f')
     time_str = time_str[:-3]
     
-    #print(time_str)
+    #logging.debug(time_str)
     sql = '''
         SELECT price FROM shenzhendata.hq_trade_spot 
      where SecurityID = ''' + stock +  '''
      and origtime<= '''+time_str+'''
      order by applseqnum desc
      limit 1'''
-    #print(sql)
+    #logging.debug(sql)
     
     mycursor.execute(sql)
     
@@ -129,7 +134,7 @@ def kbar_high(stock, start,end):
      and origtime >= '''+start_str+'''
      and origtime <= ''' + end_str+'''
      order by applseqnum'''
-    #print(sql)    
+    #logging.debug(sql)
     
     mycursor.execute(sql)
     try:
@@ -150,7 +155,7 @@ def kbar_low(stock, start,end):
      and origtime >= '''+start_str+'''
      and origtime <= ''' + end_str+'''
      order by applseqnum'''
-    #print(sql)    
+    #logging.debug(sql)
     
     mycursor.execute(sql)
     try:
@@ -184,8 +189,8 @@ def kbar(start,end,stock_list,period):
     
     starttime = datetime.fromisoformat(start)
     endtime = datetime.fromisoformat(end)
-    #print(starttime)
-    #print(endtime)    
+    #logging.debug(starttime)
+    #logging.debug(endtime)
     
     result = []
     
@@ -204,7 +209,7 @@ def kbar(start,end,stock_list,period):
         
     for stock in stock_list:
         # find out how many queries need to be sent based on start, end, period
-        print('stock ' + str(stock))
+        logging.debug('stock ' + str(stock))
         
         q_start = starttime
         q_end = starttime+time_increment
@@ -217,7 +222,7 @@ def kbar(start,end,stock_list,period):
             q_start += time_increment
             q_end += time_increment
         
-        print('next set \n')
+        logging.debug('next set \n')
         
     return result
         
@@ -236,8 +241,8 @@ def get_dataset(start, end, stock, column):
     global mydb
     mycursor = mydb.cursor()
     
-    #print('under test')
-    #print(start, end, stock)
+    #logging.debug('under test')
+    #logging.debug(start, end, stock)
     
     sql = 'SELECT origtime, securityID '
     for a in column:
@@ -255,7 +260,7 @@ def get_dataset(start, end, stock, column):
         sql = sql + ' or securityID =  \''+a + '\'\n'
     sql = sql+')'
     
-    print(sql)
+    logging.debug(sql)
     mycursor.execute(sql)
             
     result = []
@@ -263,7 +268,7 @@ def get_dataset(start, end, stock, column):
         result.append(x)
     
     
-    #print(result)
+    #logging.debug(result)
     mycursor.close()
     return result
 
@@ -273,7 +278,7 @@ def import_line(f,name):
     table = name.replace('.txt','').replace('am_','').replace('pm_','')
     read_count_max = 10
     
-    #print(sql)
+    #logging.debug(sql)
 
     i = 0
     for a in f:
@@ -281,21 +286,21 @@ def import_line(f,name):
         
         # read a line from file
         a = f.readline()
-        #print(a)
+        #logging.debug(a)
         a = a[0:-1]
-        #print(a)
+        #logging.debug(a)
         # split the line into tokens
         #token = re.split(r'\t+',a)
         token = re.split('\t+',a)
-        #print(token)
+        #logging.debug(token)
         
 
         if table == 'hq_index':
-            #print ('need one less element')
+            #logging.debug ('need one less element')
             token.remove('')
 
         sql = construct_insert_statement(table,token)
-        print(sql)
+        logging.debug(sql)
         mycursor.execute(sql)
         
         
@@ -308,18 +313,18 @@ def import_line(f,name):
             i += 1
         
     
-    print("continue")
+    logging.debug("continue")
 
     ##    for x in f:
-    ##        print(x)
+    ##        logging.debug(x)
     ##        
     ##        
     ##        # read a line from file
     ##        a = f.readline()
-    ##        print(a)
+    ##        logging.debug(a)
     ##        # split the line into tokens
     ##        token = re.split(r'\t+',a)
-    ##        print(token)
+    ##        logging.debug(token)
     
         
                 
@@ -334,26 +339,120 @@ def import_line(f,name):
     ##
     ##    #mydb.commit()
     ##
-    ##    #print(mycursor.rowcount, "record inserted.")
-    ##    #print("1 record inserted, ID:", mycursor.lastrowid)
+    ##    #logging.debug(mycursor.rowcount, "record inserted.")
+    ##    #logging.debug("1 record inserted, ID:", mycursor.lastrowid)
     ##
     ##    #mycursor.execute("SELECT * FROM customers")
     ##
     ##    #myresult = mycursor.fetchall()
     ##
     ##    for x in mycursor:
-    ##      print(x)
+    ##      logging.debug(x)
 
 
+def import_line_CH(f, name):
+    logging.info("enter import_line_CH")
+    table = name.replace('.txt', '').replace('am_', '').replace('pm_', '')
+
+    def iter_csv(filename):
+
+        reader = DictReader(f)
+
+        for line in reader:
+
+            yield {k: (converters[k](v) if k in converters else v) for k, v in line.items()}
+
+        client.execute('INSERT INTO %s VALUES', table, iter_csv(name))
+
+
+
+
+
+
+
+
+
+    read_count_max = 10
+    i = 0
+    for a in f:
+
+        # read a line from file
+        a = f.readline()
+        # logging.debug(a)
+        a = a[0:-1]
+        # logging.debug(a)
+        # split the line into tokens
+        # token = re.split(r'\t+',a)
+        token = re.split('\t+', a)
+        # logging.debug(token)
+
+        if table == 'hq_index':
+            # logging.debug ('need one less element')
+            token.remove('')
+
+        #sql = construct_insert_statement_CH(table, token)
+        sql = 'insert into ' + table + ' values ('
+        for a in token:
+            sql+=a+', '
+        sql = sql[:-2] + ')'
+
+
+
+
+
+
+
+
+        logging.debug(sql)
+        client.execute(sql)
+
+        if i == read_count_max:
+            #mydb.commit()
+            break
+        else:
+            i += 1
+
+    logging.debug("continue")
+
+    ##    for x in f:
+    ##        logging.debug(x)
+    ##
+    ##
+    ##        # read a line from file
+    ##        a = f.readline()
+    ##        logging.debug(a)
+    ##        # split the line into tokens
+    ##        token = re.split(r'\t+',a)
+    ##        logging.debug(token)
+
+    ##
+    ##    sql = "INSERT INTO customers (name, address) VALUES (%s, %s)"
+    ##    val = ("John", "Highway 21")
+    ##
+    ##    sql = "Show Tabels"
+    ##    mycursor.execute(sql)
+    ##
+    ##
+    ##    #mydb.commit()
+    ##
+    ##    #logging.debug(mycursor.rowcount, "record inserted.")
+    ##    #logging.debug("1 record inserted, ID:", mycursor.lastrowid)
+    ##
+    ##    #mycursor.execute("SELECT * FROM customers")
+    ##
+    ##    #myresult = mycursor.fetchall()
+    ##
+    ##    for x in mycursor:
+    ##      logging.debug(x)
 
 
 def construct_insert_statement(table,token):
     mycursor = mydb.cursor()
 
-    #print(name)
+    #logging.debug(name)
     #table = name.replace('.txt','').replace('am_','').replace('pm_','')
     
-    #print(table)
+    #logging.debug(table)
 
     sql = """
     select column_name
@@ -363,7 +462,7 @@ def construct_insert_statement(table,token):
     sql = sql+ ' and table_name = \''+table + '\'\n'
     sql = sql + 'ORDER BY ORDINAL_POSITION'
 
-    #print(sql)
+    #logging.debug(sql)
     mycursor.execute(sql)
 
     sql2 = 'insert into '+ table + ' ('
@@ -375,9 +474,9 @@ def construct_insert_statement(table,token):
         sql2 = sql2+x[0]+','
         #sql3 = sql3 + '%s,'
         #if not mycursor.last
-        #print(x)
-        #print(sql2)
-        #print(sql3)
+        #logging.debug(x)
+        #logging.debug(sql2)
+        #logging.debug(sql3)
 
     for i in token:
         if i == 'NULL':
@@ -387,44 +486,85 @@ def construct_insert_statement(table,token):
 
     sql2 = sql2[:-1]+')'
     sql3 = sql3[:-1]+')'
-    #print(sql2)
-    #print(sql3)
+    #logging.debug(sql2)
+    #logging.debug(sql3)
 
     sql = sql2+ sql3
-    #print(sql)
+    #logging.debug(sql)
 
     return sql
-    
 
-def import_to_db():
-    
-    
-    flag = 0
+
+def construct_insert_statement_CH(table, token):
+
+    logging.info('construct_insert_statement_CH')
+    # table = name.replace('.txt','').replace('am_','').replace('pm_','')
+
+    # logging.debug(table)
+
+    sql = """
+    select column_name
+    from information_schema.columns
+    where table_schema = 'shenzhendata'
+    """
+    sql = sql + ' and table_name = \'' + table + '\'\n'
+    sql = sql + 'ORDER BY ORDINAL_POSITION'
+
+    logging.debug(sql)
+    column_name = client.execute(sql)
+
+    sql2 = 'insert into ' + table + ' ('
+    sql3 = ' values ('
+
+    for x in column_name:
+        sql2 = sql2 + x[0] + ','
+        # sql3 = sql3 + '%s,'
+        # if not mycursor.last
+        # logging.debug(x)
+        # logging.debug(sql2)
+        # logging.debug(sql3)
+
+    for i in token:
+        if i == 'NULL':
+            sql3 = sql3 + 'null,'
+        else:
+            sql3 = sql3 + '\'' + str(i) + '\','
+
+    sql2 = sql2[:-1] + ')'
+    sql3 = sql3[:-1] + ')'
+    # logging.debug(sql2)
+    # logging.debug(sql3)
+
+    sql = sql2 + sql3
+    # logging.debug(sql)
+
+    return sql
+
+
+def import_to_db(option):
 
     # prereq need to have data file in the 'raw' directory
+    # specify where the data file located
+    # option 1 mysql 2 clickhouse
 
-    raw_path = "./raw"
+    raw_path = "../../../PythonProj/raw"
     prepro_path = "./prepro"
     
     # Walking a directory tree and printing the names of the directories and files
-    for dirpath, dirnames, files in os.walk(raw_path):
-        print(f'Found directory: {dirpath}')
+    for (dirpath, dirnames, files) in os.walk(raw_path):
+        logging.debug(f'Found directory: {dirpath}')
         for file_name in files:
-            print(file_name)
+            logging.debug(file_name)
             f = open(dirpath+"/"+file_name,"r")
-
-            if flag:
-                # debug mode
-                for x in f:
-                    print(x)
-            else:
+            # for x in f:
+            #     logging.debug(x)
+            if option == '1':
                 import_line(f,file_name)
-                print()
-                
-            
-            f.close()
+            elif option == '2':
+                import_line_CH(f,file_name)
+            logging.debug('importing data')
 
-    
+            f.close()
 
 
 def prepro_init(raw_path,prepro_path):
@@ -439,7 +579,7 @@ def prepro_init(raw_path,prepro_path):
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
         except Exception as e:
-            print('Failed to delete %s. Reason: %s' % (file_path, e))    
+            logging.debug('Failed to delete %s. Reason: %s' % (file_path, e))
 
 def prepro_copy(raw_path,prepro_path):
     
@@ -462,12 +602,12 @@ def prepro_concat(prepro_path):
     
     # Walking a directory tree and printing the names of the directories and files
     for dirpath, dirnames, files in os.walk(prepro_path):
-        print(f'Found directory: {dirpath}')
+        logging.debug(f'Found directory: {dirpath}')
         for file_name in files:
-            print(file_name)
+            logging.debug(file_name)
             f = open(dirpath+"/"+file_name,"r")
             
-            test2(f,file_name,dirpath,dirnames,prepro_path)
+            #test2(f,file_name,dirpath,dirnames,prepro_path)
                 
             f.close()
     
@@ -476,7 +616,7 @@ def prepro_concat(prepro_path):
 def preprocessing():
 
     # takes files in the raw folder and unzip into preprocessed folder
-    print("assume the files are extracted into txt format")
+    logging.debug("assume the files are extracted into txt format")
     
     raw_path = "./raw"
     prepro_path = "./prepro"
@@ -486,83 +626,142 @@ def preprocessing():
     prepro_concat(prepro_path)
     
 def resetDB():
+    # option 1 MySQL
+    # option 2 Clickhouse
+
+    logging.info('Calling resetDB')
     global mydb
-    
-    mycursor = mydb.cursor()
-    
-    # drop database
-    mycursor.execute("DROP DATABASE shenzhendata")
+    global client
 
-    # init database
-    mycursor.execute("CREATE DATABASE shenzhendata")
+    if option == 1:
+        mydb = mysql.connector.connect(
+            # connect to db
+            host="127.0.0.1",
+            user="admin",
+            passwd="password"
+        )
+        mycursor = mydb.cursor()
+        # drop database
+        try:
+            mycursor.execute("DROP DATABASE shenzhendata")
+        except:
+            logging.warning('mysql drop database unseccessful')
+        mycursor.execute("CREATE DATABASE shenzhendata")
+        mydb = mysql.connector.connect(
+            # connect to db
+            host="127.0.0.1",
+            user="admin",
+            passwd="password",
+            database="shenzhendata"
+        )
+        mycursor = mydb.cursor()
+        logging.debug(client.execute('show databases'))
+        mycursor.execute("SHOW TABLES")
+        for x in mycursor:
+            logging.debug(x)
+        init_table(mydb)
+    elif option == 2:
+        try:
+            client.execute("DROP DATABASE shenzhendata")
+        except:
+            logging.warning('clickhouse drop database error')
+        client.execute("CREATE DATABASE shenzhendata")
+        init_table_CH(client)
+    else:
+        logging.debug("invalid option")
 
-    mydb = mysql.connector.connect(
-        #connect to db
-      host="127.0.0.1",
-      user="root",
-      passwd="pwpw",
-      database="shenzhendata"
-    )
-    
-    mycursor = mydb.cursor()
-    
-    # init table
-    init_table(mydb) 
+
+def resetDB_CH():
+
+    logging.info('Calling resetDB_CH')
+    global client
+
+    try:
+        client.execute("DROP DATABASE shenzhendata")
+    except:
+        logging.warning('clickhouse drop database error')
+    client.execute("CREATE DATABASE shenzhendata")
+    init_table_CH(client)
+    logging.debug(client.execute('show tables in shenzhendata'))
 
 
 def dbconnect():
-    global mydb
     # connect to database
-    
-    #resetDB()
+    # option 1: MySQL
+
+    logging.info('Calling dbconnect')
+    global mydb
+
     try:
-        # try connect with shenzhendata table
         mydb = mysql.connector.connect(
-            #connect to db
-          host="127.0.0.1",
-          user="root",
-          passwd="pwpw",
-          database="shenzhendata"
+            # connect to db
+            host="127.0.0.1",
+            user="admin",
+            passwd="password",
+            database="shenzhendata"
         )
-        #print(mydb)
+        # logging.debug(mydb)
         mycursor = mydb.cursor()
         mycursor.execute("SHOW TABLES")
-        print('show all tables')
+        logging.debug('show all tables')
         for x in mycursor:
-            print(x)
-        
+            logging.debug(x)
+
+
     except:
         # shenzhentable not setup, create shenzhen table
-        
-        mydb = mysql.connector.connect(
-            #connect to db
-          host="127.0.0.1",
-          user="root",
-          passwd="pwpw"
-        )
-        mycursor = mydb.cursor()
-        
-            
-        # init table
-        mycursor.execute("CREATE DATABASE shenzhendata")
+        resetDB()
 
-        mydb = mysql.connector.connect(
-            #connect to db
-          host="127.0.0.1",
-          user="root",
-          passwd="pwpw",
-          database="shenzhendata"
-        )
-        
-        mycursor = mydb.cursor()
-        
-        # init table
-        init_table(mydb)        
-        
+        #
+        # mydb = mysql.connector.connect(
+        #     #connect to db
+        #   host="127.0.0.1",
+        #   user="admin",
+        #   passwd="password"
+        # )
+        # mycursor = mydb.cursor()
+        #
+        #
+        # # init table
+        # mycursor.execute("CREATE DATABASE shenzhendata")
+        # client.execute('CREATE DATABASE shenzhendata')
+        #
+        # mydb = mysql.connector.connect(
+        #     #connect to db
+        #   host="127.0.0.1",
+        #   user="admin",
+        #   passwd="password",
+        #   database="shenzhendata"
+        # )
+        #
+        # mycursor = mydb.cursor()
+        #
+        # # init table
+        # init_table(mydb, client)
+
+
+
+def dbconnect_CH():
+    # connect to database
+    # option 1: MySQL
+    # option 2: ClickHouse
+
+    logging.info('Calling dbconnect_CH')
+    global client
+
+    # resetDB()
+    try:
+        # try connect with shenzhendata table
+        client = Client(host='localhost', password='ABCDE', database='shenzhendata')
+        logging.debug(client.execute('SHOW DATABASES'))
+    except:
+        resetDB_CH()
+
 
 def init_table(mydb):
+    logging.info('Calling init_table')
+
     mycursor = mydb.cursor()
-    print(mycursor)
     
     #stock_status table
     sql = """
@@ -1329,9 +1528,876 @@ def init_table(mydb):
     
     mycursor.execute(sql)
 
-def main():
+
+def init_table_CH(client):
+    logging.info('Calling init_table_CH')
+
+
+    #logging.debug('add stock_status')
+    # stock_status table
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.stock_status (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    FInancialStatus String,
+    FinancialLongFlag String,
+    LendSecurityShortFlag String,
+    SubscribeFlag String,
+    RedeemFlag String,
+    OfferBuyFlag String,
+    ConvertStockFlag String,
+    PutBackFlag String,
+    ExerciseFlag String,
+    LongOpenFlag String,
+    ShortOpenFlag String,
+    GoldETFMaterialOfferbuyFlag String,
+    GoldETFMaterialRedeemFlag String,
+    ADReciveOfferFlag String,
+    RemoveOfferFlag String,
+    ConverStockCancelFlag String,
+    PutbackCancelFlag String,
+    PledgeFlag String,
+    UnresolvedChangeFlag String,
+    Vote String,
+    StockPledgedRepurchase String,
+    RealtimeSplit String,
+    RealtimeCombine String,
+    CoveredCall String,
+    MarketMakerOfferPrice String) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_spot')
+    # hq_snap_spot
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_snap_spot (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    PreClosePx Double,
+    PxChange1 Double,
+    PxChange2 Double,
+    OpenPx Double,
+    HighPx Double,
+    LowPx Double,
+    LastPx Double,
+    NumTrades Double,
+    TotalVolumnTrade Double,
+    TotalValueTrade Double,
+    PERatio1 Double,
+    PERatio2 Double,
+    TradingPhaseCode String,
+    totalofferqty Double,
+    weightedavgofferpx Double,
+    totalbidqty Double,
+    weightedavgbidpx Double,
+    TBD1 Double,
+    TBD2 Double,
+    TBD3 Double,
+    PreNAV Double,
+    RealTimeNAV Double,
+    WarrantPremiumRate Double,
+    UpLimitPx Double,
+    DownLimitPx Double,
+    TotalLongPosition Double    
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_snap_option
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_snap_option (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    PreClosePx Double,
+    PxChange1 Double,
+    PxChange2 Double,
+    OpenPx Double,
+    HighPx Double,
+    LowPx Double,
+    LastPx Double,
+    NumTrades Double,
+    TotalVolumnTrade Double,
+    TotalValueTrade Double,
+    PERatio1 Double,
+    PERatio2 Double,
+    TradingPhaseCode String,
+    totalofferqty Double,
+    weightedavgofferpx Double,
+    totalbidqty Double,
+    weightedavgbidpx Double,
+    PreNAV Double,
+    RealTimeNAV Double,
+    WarrantPremiumRate Double,
+    UpLimitPx Double,
+    DownLimitPx Double,
+    TotalLongPosition Double) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_snap_pledge
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_snap_pledge (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    PreClosePx Double,
+    PxChange1 Double,
+    PxChange2 Double,
+    OpenPx Double,
+    HighPx Double,
+    LowPx Double,
+    LastPx Double,
+    NumTrades Double,
+    TotalVolumnTrade Double,
+    TotalValueTrade Double,
+    PERatio1 Double,
+    PERatio2 Double,
+    TradingPhaseCode String,
+    totalofferqty Double,
+    weightedavgofferpx Double,
+    totalbidqty Double,
+    weightedavgbidpx Double,
+    TBD1 Double,
+    TBD2 Double,
+    TBD3 Double,
+    PreNAV Double,
+    RealTimeNAV Double,
+    WarrantPremiumRate Double,
+    UpLimitPx Double,
+    DownLimitPx Double,
+    TotalLongPosition Double
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_snap_bond
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_snap_bond (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    PreClosePx Double,
+    PxChange1 Double,
+    PxChange2 Double,
+    OpenPx Double,
+    HighPx Double,
+    LowPx Double,
+    LastPx Double,
+    NumTrades Double,
+    TotalVolumnTrade Double,
+    TotalValueTrade Double,
+    PERatio1 Double,
+    PERatio2 Double,
+    TradingPhaseCode String,
+    totalofferqty Double,
+    weightedavgofferpx Double,
+    totalbidqty Double,
+    weightedavgbidpx Double,
+    PreNAV Double,
+    RealTimeNAV Double,
+    WarrantPremiumRate Double,
+    UpLimitPx Double,
+    DownLimitPx Double,
+    TotalLongPosition Double) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_closeSnape
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_closeSnape (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    PreClosePx Double,
+    NumTrades Double,
+    TotalVolumeTrade Double,
+    TotalValueTrade Double,
+    TradingPhaseCode String,
+    buypx Double,
+    buynum Double,
+    sellpx Double,
+    sellnum Double
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # snap_level_spot
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.snap_level_spot (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    OfferPX1 Double,
+    BidPX1 Double,
+    OfferSize1 Double,
+    BidSize1 Double,
+    OfferPX2 Double,
+    BidPX2 Double,
+    OfferSize2 Double,
+    BidSize2 Double,
+    OfferPX3 Double,
+    BidPX3 Double,
+    OfferSize3 Double,
+    BidSize3 Double,
+    OfferPX4 Double,
+    BidPX4 Double,
+    OfferSize4 Double,
+    BidSize4 Double,
+    OfferPX5 Double,
+    BidPX5 Double,
+    OfferSize5 Double,
+    BidSize5 Double,
+    OfferPX6 Double,
+    BidPX6 Double,
+    OfferSize6 Double,
+    BidSize6 Double,
+    OfferPX7 Double,
+    BidPX7 Double,
+    OfferSize7 Double,
+    BidSize7 Double,
+    OfferPX8 Double,
+    BidPX8 Double,
+    OfferSize8 Double,
+    BidSize8 Double,
+    OfferPX9 Double,
+    BidPX9 Double,
+    OfferSize9 Double,
+    BidSize9 Double,
+    OfferPX10 Double,
+    BidPX10 Double,
+    OfferSize10 Double,
+    BidSize10 Double,
+    NUMORDERS_B1 Double,
+    NOORDERS_B1 Double,
+    ORDERQTY_B1 String,
+    NUMORDERS_S1 Double,
+    NOORDERS_S1 Double,
+    ORDERQTY_S1 String        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # snap_level_option
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.snap_level_option (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    OfferPX1 Double,
+    BidPX1 Double,
+    OfferSize1 Double,
+    BidSize1 Double,
+    OfferPX2 Double,
+    BidPX2 Double,
+    OfferSize2 Double,
+    BidSize2 Double,
+    OfferPX3 Double,
+    BidPX3 Double,
+    OfferSize3 Double,
+    BidSize3 Double,
+    OfferPX4 Double,
+    BidPX4 Double,
+    OfferSize4 Double,
+    BidSize4 Double,
+    OfferPX5 Double,
+    BidPX5 Double,
+    OfferSize5 Double,
+    BidSize5 Double,
+    OfferPX6 Double,
+    BidPX6 Double,
+    OfferSize6 Double,
+    BidSize6 Double,
+    OfferPX7 Double,
+    BidPX7 Double,
+    OfferSize7 Double,
+    BidSize7 Double,
+    OfferPX8 Double,
+    BidPX8 Double,
+    OfferSize8 Double,
+    BidSize8 Double,
+    OfferPX9 Double,
+    BidPX9 Double,
+    OfferSize9 Double,
+    BidSize9 Double,
+    OfferPX10 Double,
+    BidPX10 Double,
+    OfferSize10 Double,
+    BidSize10 Double,
+    NUMORDERS_B1 Double,
+    NOORDERS_B1 Double,
+    ORDERQTY_B1 String,
+    NUMORDERS_S1 Double,
+    NOORDERS_S1 Double,
+    ORDERQTY_S1 String        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # snap_level_pledge
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.snap_level_pledge (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    OfferPX1 Double,
+    BidPX1 Double,
+    OfferSize1 Double,
+    BidSize1 Double,
+    OfferPX2 Double,
+    BidPX2 Double,
+    OfferSize2 Double,
+    BidSize2 Double,
+    OfferPX3 Double,
+    BidPX3 Double,
+    OfferSize3 Double,
+    BidSize3 Double,
+    OfferPX4 Double,
+    BidPX4 Double,
+    OfferSize4 Double,
+    BidSize4 Double,
+    OfferPX5 Double,
+    BidPX5 Double,
+    OfferSize5 Double,
+    BidSize5 Double,
+    OfferPX6 Double,
+    BidPX6 Double,
+    OfferSize6 Double,
+    BidSize6 Double,
+    OfferPX7 Double,
+    BidPX7 Double,
+    OfferSize7 Double,
+    BidSize7 Double,
+    OfferPX8 Double,
+    BidPX8 Double,
+    OfferSize8 Double,
+    BidSize8 Double,
+    OfferPX9 Double,
+    BidPX9 Double,
+    OfferSize9 Double,
+    BidSize9 Double,
+    OfferPX10 Double,
+    BidPX10 Double,
+    OfferSize10 Double,
+    BidSize10 Double,
+    NUMORDERS_B1 Double,
+    NOORDERS_B1 Double,
+    ORDERQTY_B1 String,
+    NUMORDERS_S1 Double,
+    NOORDERS_S1 Double,
+    ORDERQTY_S1 String        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # snap_level_bond
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.snap_level_bond (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    SecurityID String,
+    SecurityIDSource String,
+    MDStreamID String,
+    OfferPX1 Double,
+    BidPX1 Double,
+    OfferSize1 Double,
+    BidSize1 Double,
+    OfferPX2 Double,
+    BidPX2 Double,
+    OfferSize2 Double,
+    BidSize2 Double,
+    OfferPX3 Double,
+    BidPX3 Double,
+    OfferSize3 Double,
+    BidSize3 Double,
+    OfferPX4 Double,
+    BidPX4 Double,
+    OfferSize4 Double,
+    BidSize4 Double,
+    OfferPX5 Double,
+    BidPX5 Double,
+    OfferSize5 Double,
+    BidSize5 Double,
+    OfferPX6 Double,
+    BidPX6 Double,
+    OfferSize6 Double,
+    BidSize6 Double,
+    OfferPX7 Double,
+    BidPX7 Double,
+    OfferSize7 Double,
+    BidSize7 Double,
+    OfferPX8 Double,
+    BidPX8 Double,
+    OfferSize8 Double,
+    BidSize8 Double,
+    OfferPX9 Double,
+    BidPX9 Double,
+    OfferSize9 Double,
+    BidSize9 Double,
+    OfferPX10 Double,
+    BidPX10 Double,
+    OfferSize10 Double,
+    BidSize10 Double,
+    NUMORDERS_B1 Double,
+    NOORDERS_B1 Double,
+    ORDERQTY_B1 String,
+    NUMORDERS_S1 Double,
+    NOORDERS_S1 Double,
+    ORDERQTY_S1 String        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_index
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_index (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    SecurityID String,
+    SecurityIDSource String,
+    PreClosePx Double,
+    OpenPx Double,
+    HighPx Double,
+    LowPx Double,
+    LastPx Double,
+    NumTrades Double,
+    TotalVolumnTrade Double,
+    TotalValueTrade Double,
+    TradingPhaseCode String    
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_order_spot
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_order_spot (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    Price Double,
+    OrderQty Double,
+    TransactTime UInt32,
+    Side String,
+    OrderType String,
+    ConfirmID Double,
+    Contractor String,
+    ContactInfo String,
+    ExpirationDays UInt8,
+    ExpirationType UInt8
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_order_agreement
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_order_agreement (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    Price Double,
+    OrderQty Double,
+    TransactTime UInt32,
+    Side String,
+    OrderType String,
+    ConfirmID Double,
+    Contractor String,
+    ContactInfo String,
+    ExpirationDays UInt8,
+    ExpirationType UInt8
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_order_refinance
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_order_refinance (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    Price Double,
+    OrderQty Double,
+    TransactTime UInt32,
+    Side String,
+    OrderType String,
+    ConfirmID Double,
+    Contractor String,
+    ContactInfo String,
+    ExpirationDays UInt8,
+    ExpirationType UInt8
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_order_pledge
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_order_pledge (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    Price Double,
+    OrderQty Double,
+    TransactTime UInt32,
+    Side String,
+    OrderType String,
+    ConfirmID Double,
+    Contractor String,
+    ContactInfo String,
+    ExpirationDays UInt8,
+    ExpirationType UInt8
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_order_option
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_order_option (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    Price Double,
+    OrderQty Double,
+    TransactTime UInt32,
+    Side String,
+    OrderType String,
+    ConfirmID Double,
+    Contractor String,
+    ContactInfo String,
+    ExpirationDays UInt8,
+    ExpirationType UInt8
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_trade_spot
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_trade_spot (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    BidApplSeqNum UInt32,
+    OfferApplSeqNum UInt32,
+    Price Double,
+    TradeQty Double,
+    ExecType String,
+    TradeTime UInt32        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_trade_agreement
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_trade_agreement (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    BidApplSeqNum UInt32,
+    OfferApplSeqNum UInt32,
+    Price Double,
+    TradeQty Double,
+    ExecType String,
+    TradeTime UInt32        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_trade_refinance
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_trade_refinance (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    BidApplSeqNum UInt32,
+    OfferApplSeqNum UInt32,
+    Price Double,
+    TradeQty Double,
+    ExecType String,
+    TradeTime UInt32        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_trade_pledge
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_trade_pledge (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    BidApplSeqNum UInt32,
+    OfferApplSeqNum UInt32,
+    Price Double,
+    TradeQty Double,
+    ExecType String,
+    TradeTime UInt32        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+    #logging.debug('add hq_snap_option')
+    # hq_trade_option
+    sql = """
+    CREATE TABLE IF NOT EXISTS shenzhendata.hq_trade_option (
+    TradeDate UInt8,
+    OrigTime UInt32,
+    SendTime UInt32,
+    Recvtime UInt32,
+    dbtime UInt32,
+    ChannelNo UInt16,
+    MDStreamID String,
+    ApplSeqNum UInt32,
+    SecurityID String,
+    SecurityIDSource String,
+    BidApplSeqNum UInt32,
+    OfferApplSeqNum UInt32,
+    Price Double,
+    TradeQty Double,
+    ExecType String,
+    TradeTime UInt32        
+    ) Engine = Memory
+    """
+    client.execute(sql)
+
+def queryDB():
+    # query the trade spot database
+
+    # get parameter
+    start = input('enter start time\t')
+    end = input('enter end time\t')
+    stock = input('enter stock list\t')
+    column = input('column interested: 1 price, 2, volumn ')
+
+    # dummy variable for test
+    start = '20190102091500010'
+    end = '20190102140000000'
+    stock = ['002899', '300548', '000000']
+    column = '12'
+
+    result = get_dataset(start, end, stock, column)
+    for a in result:
+        logging.debug(a)
+
+def kbarDB():
+    # ' do the kbar analysis'
+    # get parameter
+    start = input('enter start time\t')
+    end = input('enter end time\t')
+    stock = input('enter stock list\t')
+    period = input('time period (s,m,h,d,w,M) ')
+
+    # dummy variable for test
+    start = '2019-01-02 09:30:00'
+    end = '2019-01-02 13:35:00'
+    stock = ['002899', '300548']
+    period = 'h'
+    result = kbar(start, end, stock, period)
+    for i in result:
+        logging.debug(i)
+
+
+if __name__=='__main__':
+    logging.basicConfig(level=logging.DEBUG)
+    log_filename = '../Logs/logfile.log'
+    fmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+    logging.info('Calling main')
+
+    dbOption = input('what is the DB format? 1. MySQL 2.ClickHouse \t')
+
     global mydb
-    dbconnect()
+    global client
+
+    if dbOption == '1':
+        dbconnect()
+        while True:
+            option = input('what do you want to do? 1 import, 2 reset, 3 query, 4 kbar analysis,  5 exit\t')
+            if option == '1':
+                import_to_db(dbOption)
+            elif option == '2':
+                resetDB()
+            elif option == '3':
+                queryDB()
+            elif option == '4':
+                kbarDB()
+            else:
+                logging.debug('not')
+                break
+    elif dbOption == '2':
+        dbconnect_CH()
+        while True:
+            option = input('what do you want to do? 1 import, 2 reset, 3 query, 4 kbar analysis,  5 exit\t')
+            if option == '1':
+                import_to_db(dbOption)
+            elif option == '2':
+                resetDB_CH()
+            elif option == '3':
+                queryDB_CH()
+            elif option == '4':
+                kbarDB_CH()
+            else:
+                logging.debug('not')
+                break
+    else:
+        logging.debug("bad dboption")
+
+    # if dbOption ==1:
+    #     global mydb
+    #     mydb = mysql.connector.connect(
+    #         # connect to db
+    #         host="127.0.0.1",
+    #         user="admin",
+    #         passwd="password"
+    #     )
+    # elif dbOption == 2:
+    #     global client
+    #     client = Client(host='localhost', password='ABCDE',database = 'shenzhendata')
+    # else:
+    #     logging.info('invalid option')
+
+
+    #resetDB()
     
     # wether to create new file to prepare
     # other way is to limit the read lines into the db
@@ -1345,105 +2411,13 @@ def main():
         elif option == '2':
             resetDB()
         elif option == '3':
-            
-            # query the trade spot database
-            
-            # get parameter
-            start = input('enter start time\t')
-            end = input('enter end time\t')
-            stock = input('enter stock list\t')
-            column = input('column interested: 1 price, 2, volumn ')
-            
-            # dummy variable for test
-            start= '20190102091500010'
-            end= '20190102140000000'
-            stock = ['002899' ,'300548','000000']   
-            column = '12'
-            
-            result = get_dataset(start, end, stock, column)
-            for a in result:
-                print(a)
+            queryDB()
         elif option == '4':
-            ' do the kbar analysis'
-            # get parameter
-            start = input('enter start time\t')
-            end = input('enter end time\t')
-            stock = input('enter stock list\t')
-            period = input('time period (s,m,h,d,w,M) ')
-            
-            # dummy variable for test
-            start= '2019-01-02 09:30:00'
-            end= '2019-01-02 13:35:00'
-            stock = ['002899' ,'300548']   
-            period = 'h'
-            result = kbar(start,end,stock,period)
-            for i in result:
-                print(i)
-            
-            
+            kbarDB()
         else:
-            return
+            logging.debug('not')
+            break
     
-    
-main()
 
 
-# TODO:
 
-# issue 2 testing
-# issue 3 talib 
-# write test class and self check
-
-
-# MAJOR ISSUES
-
-
-# update history
-
-# 2020-06-10
-# Issue 1 complete, may need more testing or automated testing
-# issue 1 achieve single stock function, add functionality for stock list
-# issue 1 add functionality to select multiple data column currently price and volumn
-# issue 2 kbar all measures
-
-
-# 2020-06-05
-# create while loop for option selection
-# refreacor initialization part
-# change to read 10 line of each imported file
-# change table column to fit the actural import file
-# hq_snap_pledge: table definition and data column does not match
-# hq_snap_spot: table definition and data column does not match
-
-
-# 2020-02-12 1630-1830
-# adjust INT(64) into BIGINT during table setup ** for Mysql only\
-# single row insert test for hq_index
-# COLUMN TransactionTime need BIGINT instead of N(10)
-# COLUMN TradeTime need BIGINT instead of N(10)
-# using string statement to replace string 'NULL' value
-# Major Problem Discovered:
-#   mismatch between table definition and data
-#   -hq_snap_pledge
-#   -hq_snap_spot
-# Temp Solution: exclude hq_snap_pledge hq_snap_spot data file during import
-
-
-# Archive:
-
-
-# 2020-02-11 730-930
-# finish shenzhen table setup
-# test initialize database and table setup
-# prepare insert statement
-
-# 2020-02-05 7am-9am
-# create database shenzhendata
-# setup and create table according to documentation
-# up to hq_index
-
-
-# 2020-02-04 6am-8am
-# read file from directory
-# parse file from directory
-# create database, create table, test insert and select
