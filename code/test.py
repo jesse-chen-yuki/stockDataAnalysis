@@ -1,59 +1,77 @@
 import os
-
-from clickhouse_driver import Client
-import mysql.connector
-from csv import DictReader
-from datetime import datetime
-
-def iter_csv(filename):
-     converters = {
-         'qty': int,
-         'time': lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S')
-     }
-
-     with open(filename, 'r') as f:
-         reader = DictReader(f)
-         for line in reader:
-             yield {k: (converters[k](v) if k in converters else v) for k, v in line.items()}
+from itertools import islice
+import shutil
+import multivolumefile
+from py7zr import SevenZipFile
 
 
-client = Client(host='localhost', password='ABCDE', database='shenzhendata')
+def preprocess():
+    raw_path = "D:/StockProjectData/raw"
+    prepro_path = "D:/StockProjectData/prepro"
+    tar_path = "D:/StockProjectData/tar"
 
-client.execute(
-     'CREATE TABLE IF NOT EXISTS data_csv '
-     '('
-         'time DateTime, '
-         'order String, '
-         'qty Int32'
-     ') Engine = Memory'
- )
-client.execute('truncate table data_csv')
-a = iter_csv('data.csv')
-print(a)
-client.execute('INSERT INTO data_csv VALUES', iter_csv('data.csv'))
+    def reset():
+        # clear all prepro files and make new folder
+        try:
+            shutil.rmtree(prepro_path)
+        except Exception as e1:
+            print(e1)
+        try:
+            os.mkdir(prepro_path)
+        except Exception as e1:
+            print(e1)
+        try:
+            shutil.rmtree(raw_path)
+        except Exception as e1:
+            print(e1)
+        try:
+            os.mkdir(raw_path)
+        except Exception as e1:
+            print(e1)
+    reset()
 
-print(client.execute('select * from data_csv'))
+    def extract():
+        # extract tar files
+        for (dir_path1, dir_names, files1) in os.walk(tar_path):
+            file_list = set([])
+            target_path1 = dir_path1.replace('tar', 'raw')
+            try:
+                os.mkdir(target_path1)
+            except Exception as e1:
+                print(e1)
+            # get list of file
+            for file_name1 in files1:
+                print(file_name1)
+                file_list.add(file_name1[:-4])
+                print(file_list)
+            # extraction
+            for file in file_list:
+                print(dir_path1+'/'+file)
+                with multivolumefile.open(dir_path1+'/'+file, mode='rb') as target_archive:
+                    with SevenZipFile(target_archive, 'r') as archive:
+                        archive.extractall(target_path1)
 
-import csv
-#
-# raw_path = "../../../PythonProj/raw"
-#
-# for (dirpath, dirnames, files) in os.walk(raw_path):
-#     for file_name in files:
-#         inf = open(dirpath + "/" + file_name, "r")
-#
-#         reader = csv.reader(inf, delimiter=" ")
-#         second_col = list(zip(*reader))[1]
-#         print(second_col)
-#         f.close()
+    extract()
 
-with open('data1.csv') as inf:
-    reader = csv.reader(inf, delimiter=" ")
-    ncol = len(next(reader))  # Read first line and count columns
-    inf.seek(0)
-    print(ncol)
+    def process():
+        # process raw files
+        for (dir_path, dir_names, files) in os.walk(raw_path):
+            target_path = dir_path.replace('raw', 'prepro')
+            try:
+                os.mkdir(target_path)
+            except Exception as e:
+                print(e)
+            for file_name in files:
+                f = open(dir_path + "/" + file_name, "r")
+                w = open(target_path + "/" + file_name, "w")
+                print(dir_path, dir_names, file_name)
+                limit = 10
+                next_n_lines = list(islice(f, limit))
+                # print(next_n_lines)
+                w.writelines(next_n_lines)
+                f.close()
+                w.close()
+    process()
 
-    # print out each column
-    col = zip(*reader)
-    for i in col:
-        print(i)
+
+preprocess()

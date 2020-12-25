@@ -36,31 +36,49 @@ GRANT ALL PRIVILEGES ON *.* TO 'admin'@'localhost' WITH GRANT OPTION;
 
 mysql mysql-connector
 
+MS Visual Studio tools
+TA-Lib and make ta-lib
+py7zr
+
 download data file from BaiduYun
 
 
 # Current working
-import data under clickhouse
+
 decide use csv or line by line import
 
 # TODO:
- 
- convert mysql table create into clickhouse with correct type conversion
+extract 7z file put into raw and concat 10 lines put into preprocess
+import from preprocess from now on.
+investigate functions of talib
+implement 2 function and testing ma macd
+make standard testing dataset and expected outcome
+make report regarding the things accomplished.
 
- add logging functionality for debug
- implement clickhouse system.
- issue 2 testing
- 
  issue 3 talib 
  
+ add logging functionality for debug
+ issue 2 testing
+ 
+ old: 
+ convert mysql table create into clickhouse with correct type conversion
+ implement clickhouse system.
  write test class and self check
+ import data under clickhouse
 
 
 # MAJOR ISSUES
 
 
 # Update History
+2020-12-15
+install MS visual studio C++
+pip install TA-lib package and import into project
 
+ 2020-12-13
+ add preprocessing to create new input file of small size 10 row
+ 
+ 
  2020-07-12
  verify mySQL work in linux: connect() import()
 
